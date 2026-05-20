@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Current File (.venv)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "cwd": "${fileDirname}",
+      "envFile": "${workspaceFolder}/.env",
+      "python": "${workspaceFolder}/.venv/bin/python"
+    },
+    {
+      "name": "Chapter1: FirstAgentTest",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/code/chapter1/FirstAgentTest.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}/code/chapter1",
+      "envFile": "${workspaceFolder}/.env",
+      "python": "${workspaceFolder}/.venv/bin/python"
+    }
+  ]
+}

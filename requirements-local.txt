@@ -1,0 +1,20 @@
+# Local VS Code / Jupyter baseline used for tutorial scripts and notebooks.
+# Project-specific folders may still require their own requirements.txt.
+ipykernel
+jupyter
+requests
+openai
+tavily-python
+python-dotenv
+hello-agents==0.2.9
+huggingface_hub
+datasets
+pandas
+gradio
+pydantic-settings
+loguru
+ddgs
+fastmcp
+google-search-results
+streamlit
+plotly
