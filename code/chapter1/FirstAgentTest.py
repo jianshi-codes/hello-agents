@@ -59,6 +59,7 @@ def get_weather(city: str) -> str:
 
 
 import os
+from pathlib import Path
 from tavily import TavilyClient
 
 def get_attraction(city: str, weather: str) -> str:
@@ -109,6 +110,7 @@ available_tools = {
 }
 
 from openai import OpenAI
+from dotenv import load_dotenv
 
 class OpenAICompatibleClient:
     """
@@ -141,11 +143,42 @@ class OpenAICompatibleClient:
 import re
 
 # --- 1. 配置LLM客户端 ---
-# 请根据您使用的服务，将这里替换成对应的凭证和地址
-API_KEY = "YOUR_API_KEY"
-BASE_URL = "YOUR_BASE_URL"
-MODEL_ID = "YOUR_MODEL_ID"
-os.environ['TAVILY_API_KEY'] = "YOUR_TAVILY_API_KEY"
+# 优先读取仓库根目录的 .env，避免把密钥写进示例代码。
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+API_KEY = os.environ.get("OPENAI_API_KEY") or os.environ.get("LLM_API_KEY") or "YOUR_API_KEY"
+BASE_URL = os.environ.get("OPENAI_BASE_URL") or os.environ.get("LLM_BASE_URL") or "YOUR_BASE_URL"
+MODEL_ID = (
+    os.environ.get("MODEL_NAME")
+    or os.environ.get("OPENAI_MODEL")
+    or os.environ.get("LLM_MODEL_ID")
+    or os.environ.get("LLM_MODEL")
+    or "YOUR_MODEL_ID"
+)
+
+def _is_placeholder(value: str) -> bool:
+    return (
+        not value
+        or value.startswith("YOUR_")
+        or value.startswith("your_")
+    )
+
+missing_config = [
+    name
+    for name, value in {
+        "OPENAI_API_KEY/LLM_API_KEY": API_KEY,
+        "OPENAI_BASE_URL/LLM_BASE_URL": BASE_URL,
+        "MODEL_NAME/LLM_MODEL_ID": MODEL_ID,
+        "TAVILY_API_KEY": os.environ.get("TAVILY_API_KEY", ""),
+    }.items()
+    if _is_placeholder(value)
+]
+
+if missing_config:
+    print("chapter1 环境依赖已就绪，但完整运行需要先配置真实 API 信息。")
+    print("请复制 .env.example 到 .env，或直接编辑仓库根目录 .env。")
+    print("缺少或仍是占位符的配置:", ", ".join(missing_config))
+    raise SystemExit(0)
 
 llm = OpenAICompatibleClient(
     model=MODEL_ID,
