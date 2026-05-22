@@ -17,6 +17,10 @@ Action: 你决定采取的行动，必须是以下格式之一：
 - `Finish[最终答案]`：当你认为已经获得最终答案时。
 - 当你收集到足够的信息，能够回答用户的最终问题时，你必须在`Action:`字段后使用 `Finish[最终答案]` 来输出最终答案。
 
+重要约束：
+- 每轮只能输出一个 `Thought:` 和一个 `Action:`。
+- 不要输出 `Observation:`，工具执行结果会由程序提供。
+- `Action:` 后只能写一个动作表达式，不要追加解释、第二个动作或其他文本。
 
 现在，请开始解决以下问题：
 Question: {question}
@@ -51,15 +55,17 @@ class ReActAgent:
             if thought: print(f"🤔 思考: {thought}")
             if not action: print("警告：未能解析出有效的Action，流程终止。"); break
             
-            if action.startswith("Finish"):
-                # 如果是Finish指令，提取最终答案并结束
-                final_answer = self._parse_action_input(action)
-                print(f"🎉 最终答案: {final_answer}")
-                return final_answer
-            
             tool_name, tool_input = self._parse_action(action)
-            if not tool_name or not tool_input:
-                self.history.append("Observation: 无效的Action格式，请检查。"); continue
+            if not tool_name:
+                self.history.append("Observation: 无效的Action格式。请只输出一个规范的Action。"); continue
+
+            if tool_name == "Finish":
+                # 如果是Finish指令，提取最终答案并结束
+                print(f"🎉 最终答案: {tool_input}")
+                return tool_input
+
+            if not tool_input:
+                self.history.append("Observation: 工具输入为空，请检查Action格式。"); continue
 
             print(f"🎬 行动: {tool_name}[{tool_input}]")
             tool_function = self.tool_executor.getTool(tool_name)
@@ -74,20 +80,39 @@ class ReActAgent:
 
     def _parse_output(self, text: str):
         # Thought: 匹配到 Action: 或文本末尾
-        thought_match = re.search(r"Thought:\s*(.*?)(?=\nAction:|$)", text, re.DOTALL)
-        # Action: 匹配到文本末尾
-        action_match = re.search(r"Action:\s*(.*?)$", text, re.DOTALL)
+        thought_match = re.search(r"^Thought:\s*(.*?)(?=^Action:|\Z)", text, re.DOTALL | re.MULTILINE)
+        # 只提取第一个完整的 Action 表达式，避免把模型误输出的 Observation 或后续 Action 拼进工具输入。
+        action_header_match = re.search(r"^Action:\s*", text, re.MULTILINE)
         thought = thought_match.group(1).strip() if thought_match else None
-        action = action_match.group(1).strip() if action_match else None
+        action = self._extract_action_expression(text[action_header_match.end():]) if action_header_match else None
         return thought, action
 
     def _parse_action(self, action_text: str):
-        match = re.match(r"(\w+)\[(.*)\]", action_text, re.DOTALL)
+        match = re.fullmatch(r"\s*(\w+)\[(.*)\]\s*", action_text, re.DOTALL)
         return (match.group(1), match.group(2)) if match else (None, None)
 
     def _parse_action_input(self, action_text: str):
-        match = re.match(r"\w+\[(.*)\]", action_text, re.DOTALL)
-        return match.group(1) if match else ""
+        _, action_input = self._parse_action(action_text)
+        return action_input or ""
+
+    def _extract_action_expression(self, text: str):
+        match = re.match(r"\s*\w+\[", text)
+        if not match:
+            return None
+
+        depth = 1
+        index = match.end()
+        while index < len(text):
+            char = text[index]
+            if char == "[":
+                depth += 1
+            elif char == "]":
+                depth -= 1
+                if depth == 0:
+                    return text[:index + 1].strip()
+            index += 1
+
+        return None
 
 if __name__ == '__main__':
     llm = HelloAgentsLLM()
