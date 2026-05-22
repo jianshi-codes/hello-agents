@@ -84,7 +84,7 @@
 | [09-Agent Development Pitfalls and Practical Lessons](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra09-Agent应用开发实践踩坑与经验分享.md) | Practical lessons and pitfalls from building a Code Agent |
 | [10-Agent Self-Evolution](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra10-Agent自进化.md) | Four closed loops of agent self-evolution and representative projects |
 | [11-Web Agent: Principles and Practice](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra11-WebAgent科普与实战.md) | Web Agent principles, anti-bot practice, and HelloAgents integration |
-| [12-Trip Planner Post-Training Practice](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra12-旅行助手后训练实战.md) | From product protocol to LoRA SFT evaluation loop |
+| [12-Trip Planner Post-Training in Practice](https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra12-旅行助手后训练实战.md) | Turning a trip-planner demo into a usable planner |
 
 ### PDF Version Download
 
