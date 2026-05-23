@@ -3,8 +3,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import ast
+import math
+import operator
 from serpapi import SerpApiClient
 from typing import Dict, Any
+
 
 def search(query: str) -> str:
     """
@@ -48,7 +52,121 @@ def search(query: str) -> str:
     except Exception as e:
         return f"搜索时发生错误: {e}"
     
-from typing import Dict, Any
+
+def calculate(expression: str) -> str:
+    """
+    A safe calculator function.
+
+    Supported:
+    - +, -, *, /, //, %, **
+    - parentheses
+    - unary + and -
+    - math functions: sqrt, sin, cos, tan, log, log10, abs, round
+    - constants: pi, e
+
+    Examples:
+        calculate("1 + 2 * 3") -> "7"
+        calculate("sqrt(16) + sin(pi / 2)") -> "5.0"
+    """
+
+    allowed_binary_operators = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+    }
+
+    allowed_unary_operators = {
+        ast.UAdd: operator.pos,
+        ast.USub: operator.neg,
+    }
+
+    allowed_functions = {
+        "sqrt": math.sqrt,
+        "sin": math.sin,
+        "cos": math.cos,
+        "tan": math.tan,
+        "log": math.log,
+        "log10": math.log10,
+        "abs": abs,
+        "round": round,
+    }
+
+    allowed_constants = {
+        "pi": math.pi,
+        "e": math.e,
+    }
+
+    def evaluate(node):
+        if isinstance(node, ast.Expression):
+            return evaluate(node.body)
+
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (int, float)):
+                return node.value
+            raise ValueError("Only numbers are allowed.")
+
+        if isinstance(node, ast.BinOp):
+            operator_type = type(node.op)
+
+            if operator_type not in allowed_binary_operators:
+                raise ValueError("Unsupported operator.")
+
+            left = evaluate(node.left)
+            right = evaluate(node.right)
+
+            return allowed_binary_operators[operator_type](left, right)
+
+        if isinstance(node, ast.UnaryOp):
+            operator_type = type(node.op)
+
+            if operator_type not in allowed_unary_operators:
+                raise ValueError("Unsupported unary operator.")
+
+            operand = evaluate(node.operand)
+
+            return allowed_unary_operators[operator_type](operand)
+
+        if isinstance(node, ast.Name):
+            if node.id in allowed_constants:
+                return allowed_constants[node.id]
+            raise ValueError(f"Unknown variable or constant: {node.id}")
+
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                raise ValueError("Only simple function calls are allowed.")
+
+            function_name = node.func.id
+
+            if function_name not in allowed_functions:
+                raise ValueError(f"Unsupported function: {function_name}")
+
+            args = [evaluate(arg) for arg in node.args]
+
+            return allowed_functions[function_name](*args)
+
+        raise ValueError("Unsupported expression.")
+
+    try:
+        expression = expression.replace("×", "*").replace("÷", "/")
+        parsed_expression = ast.parse(expression, mode="eval")
+        result = evaluate(parsed_expression)
+
+        if not isinstance(result, (int, float)):
+            raise ValueError("Result is not a number.")
+
+        return str(result)
+
+    except ZeroDivisionError:
+        return "计算时发生错误: Cannot divide by zero."
+    except SyntaxError:
+        return "计算时发生错误: Invalid expression."
+    except Exception as e:
+        return f"计算时发生错误: {e}"
+
 
 class ToolExecutor:
     """
@@ -91,6 +209,17 @@ if __name__ == '__main__':
     # 2. 注册我们的实战搜索工具
     search_description = "一个网页搜索引擎。当你需要回答关于时事、事实以及在你的知识库中找不到的信息时，应使用此工具。"
     toolExecutor.registerTool("Search", search_description, search)
+
+    calculate_description = """一个计算器工具。当你需要计算一个 String 格式类型的计算表达式时，应使用此工具。
+
+此工具支持:
+- +, -, *, /, //, %, **
+- parentheses
+- unary + and -
+- math functions: sqrt, sin, cos, tan, log, log10, abs, round
+- constants: pi, e
+"""
+    toolExecutor.registerTool("Calculator", calculate_description, calculate)
     
     # 3. 打印可用的工具
     print("\n--- 可用的工具 ---")
@@ -100,6 +229,18 @@ if __name__ == '__main__':
     print("\n--- 执行 Action: Search['英伟达最新的GPU型号是什么'] ---")
     tool_name = "Search"
     tool_input = "英伟达最新的GPU型号是什么"
+
+    tool_function = toolExecutor.getTool(tool_name)
+    if tool_function:
+        observation = tool_function(tool_input)
+        print("--- 观察 (Observation) ---")
+        print(observation)
+    else:
+        print(f"错误：未找到名为 '{tool_name}' 的工具。")
+
+    print("\n--- 执行 Action: Calculator['(123 + 456) × 789 / 12'] ---")
+    tool_name = "Calculator"
+    tool_input = "(123 + 456) * 789/ 12"
 
     tool_function = toolExecutor.getTool(tool_name)
     if tool_function:
