@@ -24,24 +24,33 @@
 ### 1. 安装依赖
 
 ```bash
-pip install agentscope
-pip install dashscope
-pip install pydantic
+pip install -r requirements.txt
 ```
 
 ### 2. 配置环境变量
 
-设置阿里云 DashScope API Key：
+默认读取仓库根目录 `.env` 中的 OpenAI-compatible 模型配置，DeepSeek 可使用：
+
+```bash
+LLM_API_KEY="your-deepseek-api-key"
+LLM_BASE_URL="https://api.deepseek.com"
+LLM_MODEL_ID="deepseek-chat"
+```
+
+如果使用阿里云 DashScope / 通义千问，也可以设置：
 
 ```bash
 # Linux/Mac
 export DASHSCOPE_API_KEY="your-api-key-here"
+export DASHSCOPE_MODEL_ID="qwen-max"
 
 # Windows PowerShell
 $env:DASHSCOPE_API_KEY="your-api-key-here"
+$env:DASHSCOPE_MODEL_ID="qwen-max"
 
 # Windows CMD
 set DASHSCOPE_API_KEY=your-api-key-here
+set DASHSCOPE_MODEL_ID=qwen-max
 ```
 
 获取 API Key：https://dashscope.console.aliyun.com/apiKey

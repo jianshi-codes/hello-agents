@@ -8,10 +8,17 @@ import os
 import random
 from typing import List, Dict, Optional
 
+from dotenv import load_dotenv
 from agentscope.agent import ReActAgent
-from agentscope.model import DashScopeChatModel
-from agentscope.pipeline import MsgHub, sequential_pipeline, fanout_pipeline
-from agentscope.formatter import DashScopeMultiAgentFormatter
+from agentscope.message import Msg
+from agentscope.model import DashScopeChatModel, OpenAIChatModel
+from agentscope.pipeline import MsgHub, fanout_pipeline
+from agentscope.formatter import DashScopeMultiAgentFormatter, OpenAIMultiAgentFormatter
+
+try:
+    from agentscope.formatter import DeepSeekMultiAgentFormatter
+except ImportError:
+    DeepSeekMultiAgentFormatter = OpenAIMultiAgentFormatter
 
 from prompt_cn import ChinesePrompts
 from game_roles import GameRoles
@@ -32,6 +39,90 @@ from utils_cn import (
     MAX_GAME_ROUND,
     MAX_DISCUSSION_ROUND,
 )
+
+load_dotenv()
+
+
+class GameReActAgent(ReActAgent):
+    """ReActAgent variant compatible with structured calls on interruption."""
+
+    async def handle_interrupt(self, _msg=None, **_kwargs):
+        return await super().handle_interrupt(_msg)
+
+
+def clean_text(text: str, max_length: int = 500) -> str:
+    """Normalize model text for compact terminal logs."""
+    compact = " ".join(str(text).split())
+    if len(compact) <= max_length:
+        return compact
+    return compact[: max_length - 3] + "..."
+
+
+def msg_text(msg: Msg | None) -> str:
+    """Extract visible text from an AgentScope message."""
+    if msg is None:
+        return ""
+    return clean_text(msg.get_text_content())
+
+
+def log_section(title: str) -> None:
+    print(f"\n=== {title} ===")
+
+
+def log_speech(stage: str, msg: Msg | None) -> None:
+    if msg is None:
+        print(f"[{stage}] 无回复")
+        return
+    print(f"[{stage}] {msg.name}: {msg_text(msg)}")
+
+
+def log_metadata(stage: str, speaker: str, metadata: dict | None) -> None:
+    if not metadata:
+        print(f"[{stage}] {speaker}: 无结构化结果")
+        return
+    items = "，".join(f"{key}={value}" for key, value in metadata.items())
+    print(f"[{stage}] {speaker}: {items}")
+
+
+def create_chat_model_and_formatter():
+    """Create a model/formatter pair from environment variables."""
+    if os.getenv("LLM_API_KEY"):
+        base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com")
+        formatter_cls = (
+            DeepSeekMultiAgentFormatter
+            if "deepseek" in base_url.lower()
+            else OpenAIMultiAgentFormatter
+        )
+
+        return (
+            OpenAIChatModel(
+                model_name=os.getenv("LLM_MODEL_ID", "deepseek-v4-pro"),
+                api_key=os.getenv("LLM_API_KEY"),
+                stream=False,
+                client_args={"base_url": base_url},
+                generate_kwargs={
+                    "extra_body": {
+                        "thinking": {"type": "disabled"},
+                    },
+                },
+            ),
+            formatter_cls(),
+        )
+
+    if os.getenv("DASHSCOPE_API_KEY"):
+        return (
+            DashScopeChatModel(
+                model_name=os.getenv("DASHSCOPE_MODEL_ID", "qwen-max"),
+                api_key=os.getenv("DASHSCOPE_API_KEY"),
+                enable_thinking=True,
+            ),
+            DashScopeMultiAgentFormatter(),
+        )
+
+    raise RuntimeError(
+        "请设置 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL_ID，"
+        "或设置 DASHSCOPE_API_KEY。",
+    )
 
 
 class ThreeKingdomsWerewolfGame:
@@ -56,17 +147,15 @@ class ThreeKingdomsWerewolfGame:
         """创建具有三国背景的玩家"""
         name = get_chinese_name(character)
         self.roles[name] = role
+        model, formatter = create_chat_model_and_formatter()
         
-        agent = ReActAgent(
+        agent = GameReActAgent(
             name=name,
             sys_prompt=ChinesePrompts.get_role_prompt(role, character),
-            model=DashScopeChatModel(
-                model_name="qwen-max",
-                api_key=os.environ["DASHSCOPE_API_KEY"],
-                enable_thinking=True,
-            ),
-            formatter=DashScopeMultiAgentFormatter(),
+            model=model,
+            formatter=formatter,
         )
+        agent.disable_console_output()
         
         # 角色身份确认
         await agent.observe(
@@ -81,7 +170,8 @@ class ThreeKingdomsWerewolfGame:
     
     async def setup_game(self, player_count: int = 6):
         """设置游戏"""
-        print("🎮 开始设置三国狼人杀游戏...")
+        log_section("游戏设置")
+        print("开始设置三国狼人杀游戏...")
         
         # 获取角色配置
         roles = GameRoles.get_standard_setup(player_count)
@@ -112,7 +202,7 @@ class ThreeKingdomsWerewolfGame:
             f"三国狼人杀游戏开始！参与者：{format_player_list(self.alive_players)}"
         )
         
-        print(f"✅ 游戏设置完成，共{len(self.alive_players)}名玩家")
+        print(f"游戏设置完成：{len(self.alive_players)}名玩家")
     
     async def werewolf_phase(self, round_num: int):
         """狼人阶段"""
@@ -122,6 +212,7 @@ class ThreeKingdomsWerewolfGame:
         await self.moderator.announce(f"🐺 狼人请睁眼，选择今晚要击杀的目标...")
         
         # 狼人讨论
+        log_section(f"第{round_num}夜 - 狼人讨论")
         async with MsgHub(
             self.werewolves,
             enable_auto_broadcast=True,
@@ -130,9 +221,10 @@ class ThreeKingdomsWerewolfGame:
             ),
         ) as werewolves_hub:
             # 讨论阶段
-            for _ in range(MAX_DISCUSSION_ROUND):
+            for discussion_round in range(1, MAX_DISCUSSION_ROUND + 1):
                 for wolf in self.werewolves:
-                    await wolf(structured_model=DiscussionModelCN)
+                    reply = await wolf(structured_model=DiscussionModelCN)
+                    log_speech(f"狼人讨论{discussion_round}", reply)
             
             # 投票击杀
             werewolves_hub.set_auto_broadcast(False)
@@ -149,6 +241,7 @@ class ThreeKingdomsWerewolfGame:
                 # 检查vote_msg是否为None或metadata是否存在
                 if vote_msg is not None and hasattr(vote_msg, 'metadata') and vote_msg.metadata is not None:
                     votes[self.werewolves[i].name] = vote_msg.metadata.get("target")
+                    log_metadata("狼人击杀投票", self.werewolves[i].name, vote_msg.metadata)
                 else:
                     # 如果返回无效,随机选择一个目标
                     print(f"⚠️ {self.werewolves[i].name} 的击杀投票无效,随机选择目标")
@@ -157,6 +250,7 @@ class ThreeKingdomsWerewolfGame:
                     votes[self.werewolves[i].name] = random.choice(valid_targets) if valid_targets else None
             
             killed_player, _ = majority_vote_cn(votes)
+            print(f"[狼人击杀结果] 目标={killed_player}")
             return killed_player
     
     async def seer_phase(self):
@@ -182,6 +276,7 @@ class ThreeKingdomsWerewolfGame:
             return
 
         target_role = self.roles.get(target_name, "村民")
+        log_metadata("预言家查验", seer_agent.name, check_result.metadata)
         
         # 告知预言家结果
         result_msg = f"查验结果：{target_name}是{'狼人' if target_role == '狼人' else '好人'}"
@@ -201,6 +296,11 @@ class ThreeKingdomsWerewolfGame:
         
         # 女巫行动
         witch_action = await witch_agent(structured_model=WitchActionModelCN)
+        log_metadata(
+            "女巫行动",
+            witch_agent.name,
+            witch_action.metadata if witch_action else None,
+        )
 
         saved_player = None
         poisoned_player = None
@@ -238,6 +338,11 @@ class ThreeKingdomsWerewolfGame:
             hunter_action = await hunter_agent(
                 structured_model=get_hunter_model_cn(self.alive_players)
             )
+            log_metadata(
+                "猎人行动",
+                hunter_agent.name,
+                hunter_action.metadata if hunter_action else None,
+            )
 
             # 检查返回结果是否有效
             if hunter_action is None or not hasattr(hunter_action, 'metadata') or hunter_action.metadata is None:
@@ -273,6 +378,7 @@ class ThreeKingdomsWerewolfGame:
         await self.moderator.day_announcement(round_num)
         
         # 讨论阶段
+        log_section(f"第{round_num}天 - 自由讨论")
         async with MsgHub(
             self.alive_players,
             enable_auto_broadcast=True,
@@ -281,7 +387,9 @@ class ThreeKingdomsWerewolfGame:
             ),
         ) as all_hub:
             # 每人发言一轮
-            await sequential_pipeline(self.alive_players)
+            for player in self.alive_players:
+                reply = await player()
+                log_speech("白天发言", reply)
             
             # 投票阶段
             all_hub.set_auto_broadcast(False)
@@ -298,6 +406,7 @@ class ThreeKingdomsWerewolfGame:
                 # 检查vote_msg是否为None或metadata是否存在
                 if vote_msg is not None and hasattr(vote_msg, 'metadata') and vote_msg.metadata is not None:
                     votes[self.alive_players[i].name] = vote_msg.metadata.get("vote")
+                    log_metadata("放逐投票", self.alive_players[i].name, vote_msg.metadata)
                 else:
                     # 如果返回无效,默认弃票
                     print(f"⚠️ {self.alive_players[i].name} 的投票无效,视为弃票")
@@ -314,7 +423,7 @@ class ThreeKingdomsWerewolfGame:
             await self.setup_game()
             
             for round_num in range(1, MAX_GAME_ROUND + 1):
-                print(f"\n🌙 === 第{round_num}轮游戏开始 ===")
+                log_section(f"第{round_num}轮开始")
                 
                 # 夜晚阶段
                 await self.moderator.night_announcement(round_num)
@@ -357,8 +466,10 @@ class ThreeKingdomsWerewolfGame:
                     await self.moderator.game_over_announcement(winner)
                     return
                 
-                print(f"第{round_num}轮结束，存活玩家：{format_player_list(self.alive_players)}")
+                print(f"[回合结束] 第{round_num}轮，存活玩家：{format_player_list(self.alive_players)}")
         
+        except KeyboardInterrupt:
+            print("\n游戏已手动中断。")
         except Exception as e:
             print(f"❌ 游戏运行出错：{e}")
             import traceback
@@ -368,8 +479,8 @@ class ThreeKingdomsWerewolfGame:
 async def main():
     """主函数"""
     # 检查环境变量
-    if "DASHSCOPE_API_KEY" not in os.environ:
-        print("❌ 请设置环境变量 DASHSCOPE_API_KEY")
+    if "LLM_API_KEY" not in os.environ and "DASHSCOPE_API_KEY" not in os.environ:
+        print("❌ 请设置 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL_ID 或 DASHSCOPE_API_KEY")
         return
     
     print("🎮 欢迎来到三国狼人杀！")
