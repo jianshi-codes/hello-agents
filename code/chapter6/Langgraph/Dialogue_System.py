@@ -22,11 +22,11 @@ load_dotenv()
 # 定义状态结构
 class SearchState(TypedDict):
     messages: Annotated[list, add_messages]
-    user_query: str        # 用户查询
-    search_query: str      # 优化后的搜索查询
+    user_query: str        # 经过LLM理解后的用户需求总结
+    search_query: str      # 优化后用于Tavily API的搜索查询
     search_results: str    # Tavily搜索结果
     final_answer: str      # 最终答案
-    step: str             # 当前步骤
+    step: str              # 当前步骤
 
 # 初始化模型和Tavily客户端
 llm = ChatOpenAI(
