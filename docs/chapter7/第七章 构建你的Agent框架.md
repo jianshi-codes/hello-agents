@@ -96,7 +96,7 @@ hello-agents/
 为了让读者能够快速体验本章的完整功能，我们提供了可直接安装的Python包。你可以通过以下命令安装本章对应的版本：
 
 ```bash
-# hello-agents 框架代码可见链接：https://github.com/jjyaoao/HelloAgents
+# hello-agents 框架代码可见链接：https://github.com/jjyaoao/helloagents
 # Python 版本需要>=3.10
 pip install "hello-agents==0.1.1"
 ```
@@ -2146,7 +2146,7 @@ async def test_parallel_execution():
 
 ## 7.6 本章小结
 
-在正式总结之前，我们想告诉大家一个好消息：对于本章实现的所有方法和功能，都在GitHub仓库中提供了完整的测试案例。你可以访问[这个链接](https://github.com/jjyaoao/HelloAgents/blob/main/examples/chapter07_basic_setup.py)查看和运行这些测试代码。这个文件包含了四种Agent范式的演示、工具系统的集成测试、高级功能的使用示例，以及交互式的Agent体验。如果你想验证自己的实现是否正确，或者想深入了解框架的实际使用方式，这些测试案例将是有价值的参考。
+在正式总结之前，我们想告诉大家一个好消息：对于本章实现的所有方法和功能，都在GitHub仓库中提供了完整的测试案例。你可以访问[这个链接](https://github.com/datawhalechina/hello-agents/tree/main/code/chapter7)查看和运行这些测试代码。该目录包含了四种Agent范式的演示、工具系统的集成测试、高级功能的使用示例，以及交互式的Agent体验。如果你想验证自己的实现是否正确，或者想深入了解框架的实际使用方式，这些测试案例将是有价值的参考。
 
 回顾本章，我们完成了一项富有挑战的任务：一步步构建了一个基础的智能体框架——HelloAgents。这个过程始终遵循着“分层解耦、职责单一、接口统一”的核心原则。
 
